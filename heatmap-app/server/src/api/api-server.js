@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DIMENSION_Y = exports.DIMENSION_X = exports.EMPTY_IMAGE_HEIGHT = exports.EMPTY_IMAGE_WIDTH = exports.EMPTY_MAP_IMAGE_PATH = exports.BINARY_FILE_PATH = exports.PORT = void 0;
+exports.PORT = 3001;
+exports.BINARY_FILE_PATH = '../sst.grid';
+exports.EMPTY_MAP_IMAGE_PATH = '../empty-map.jpg';
+exports.EMPTY_IMAGE_WIDTH = 3600;
+exports.EMPTY_IMAGE_HEIGHT = 1800;
+exports.DIMENSION_X = 36000;
+exports.DIMENSION_Y = 17999;
