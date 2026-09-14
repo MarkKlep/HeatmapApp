@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { API_URL } from "./api/api-client";
+import { API_URL, API_KEY } from "./api/api-client";
 import "./App.css";
 
 function App() {
@@ -8,7 +8,9 @@ function App() {
 
   const fetchData = async () => {
     try {
-      const response = await fetch(API_URL);
+      const response = await fetch(API_URL, {
+        headers: { "x-api-key": API_KEY },
+      });
 
       const data = await response.blob();
 

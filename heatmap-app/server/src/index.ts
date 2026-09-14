@@ -8,9 +8,18 @@ import {
   EMPTY_MAP_IMAGE_PATH,
 } from "./api/api-server";
 
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
+
 const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
+
+const API_KEY = process.env.API_KEY;
+
+if (!API_KEY) {
+  throw new Error("API_KEY is not set in .env");
+}
 
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
@@ -124,6 +133,11 @@ const generateHeatMap = async (binaryData: Buffer) => {
 
 app.get("/api/data", async (req: any, res: any) => {
   try {
+    if (req.header("x-api-key") !== API_KEY) {
+      res.status(401).send("Unauthorized");
+      return;
+    }
+
     if (cached) {
       res.send(cached);
       return;
