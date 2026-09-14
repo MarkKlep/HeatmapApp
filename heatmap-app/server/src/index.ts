@@ -12,10 +12,12 @@ const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 
-const { createCanvas, loadImage } = require("canvas");
+const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
 export const app = express();
 app.use(cors());
+
+const GRID_STEP = 10;
 
 const slotWidth = EMPTY_IMAGE_WIDTH / DIMENSION_X;
 const slotHeight = EMPTY_IMAGE_HEIGHT / DIMENSION_Y;
@@ -32,25 +34,39 @@ export const readBinaryFile = (filePath: string): Promise<Buffer> => {
   });
 };
 
+const TEMP_MIN = 30;
+const TEMP_MAX = 93;
+
+const COLOR_STOPS: [number, number, number][] = [
+  [13, 42, 140],
+  [24, 80, 190],
+  [41, 140, 220],
+  [86, 196, 220],
+  [190, 226, 160],
+  [248, 230, 70],
+  [245, 160, 40],
+  [222, 60, 30],
+  [140, 15, 15],
+];
+
 export const setColor = (temp: number) => {
-  const celcius = (temp - 32) / 1.8;
-  let color;
+  const ratio = Math.min(
+    1,
+    Math.max(0, (temp - TEMP_MIN) / (TEMP_MAX - TEMP_MIN))
+  );
 
-  if (celcius <= 0) {
-    color = "blue";
-  } else if (celcius > 0 && celcius < 10) {
-    color = "lightblue";
-  } else if (celcius >= 10 && celcius < 20) {
-    color = "lime";
-  } else if (celcius >= 20 && celcius < 30) {
-    color = "yellow";
-  } else if (celcius >= 30 && celcius < 40) {
-    color = "orange";
-  } else {
-    color = "red";
-  }
+  const position = ratio * (COLOR_STOPS.length - 1);
+  const index = Math.min(COLOR_STOPS.length - 2, Math.floor(position));
+  const blend = position - index;
 
-  return color;
+  const [r1, g1, b1] = COLOR_STOPS[index];
+  const [r2, g2, b2] = COLOR_STOPS[index + 1];
+
+  const r = Math.round(r1 + (r2 - r1) * blend);
+  const g = Math.round(g1 + (g2 - g1) * blend);
+  const b = Math.round(b1 + (b2 - b1) * blend);
+
+  return `rgb(${r}, ${g}, ${b})`;
 };
 
 const generateHeatMap = async (binaryData: Buffer) => {
@@ -63,8 +79,8 @@ const generateHeatMap = async (binaryData: Buffer) => {
 
     const tempArr = new Int8Array(binaryData);
 
-    for (let y = 0; y < DIMENSION_Y; y++) {
-      for (let x = 0; x < DIMENSION_X; x++) {
+    for (let y = 0; y < DIMENSION_Y; y += GRID_STEP) {
+      for (let x = 0; x < DIMENSION_X; x += GRID_STEP) {
         const temp = tempArr[y * DIMENSION_X + x];
 
         if (temp === -1) {
@@ -75,8 +91,8 @@ const generateHeatMap = async (binaryData: Buffer) => {
         ctx.fillRect(
           x * slotWidth,
           EMPTY_IMAGE_HEIGHT - y * slotHeight,
-          slotWidth,
-          slotHeight
+          slotWidth * GRID_STEP,
+          slotHeight * GRID_STEP
         );
       }
     }
