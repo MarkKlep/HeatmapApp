@@ -14,13 +14,10 @@ const cors = require("cors");
 
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
+let cached: Buffer | null = null;
+
 export const app = express();
 app.use(cors());
-
-const GRID_STEP = 10;
-
-const slotWidth = EMPTY_IMAGE_WIDTH / DIMENSION_X;
-const slotHeight = EMPTY_IMAGE_HEIGHT / DIMENSION_Y;
 
 export const readBinaryFile = (filePath: string): Promise<Buffer> => {
   return new Promise((resolve, reject) => {
@@ -49,7 +46,7 @@ const COLOR_STOPS: [number, number, number][] = [
   [140, 15, 15],
 ];
 
-export const setColor = (temp: number) => {
+const setColorRgb = (temp: number): [number, number, number] => {
   const ratio = Math.min(
     1,
     Math.max(0, (temp - TEMP_MIN) / (TEMP_MAX - TEMP_MIN))
@@ -62,9 +59,15 @@ export const setColor = (temp: number) => {
   const [r1, g1, b1] = COLOR_STOPS[index];
   const [r2, g2, b2] = COLOR_STOPS[index + 1];
 
-  const r = Math.round(r1 + (r2 - r1) * blend);
-  const g = Math.round(g1 + (g2 - g1) * blend);
-  const b = Math.round(b1 + (b2 - b1) * blend);
+  return [
+    Math.round(r1 + (r2 - r1) * blend),
+    Math.round(g1 + (g2 - g1) * blend),
+    Math.round(b1 + (b2 - b1) * blend),
+  ];
+};
+
+export const setColor = (temp: number) => {
+  const [r, g, b] = setColorRgb(temp);
 
   return `rgb(${r}, ${g}, ${b})`;
 };
@@ -79,23 +82,37 @@ const generateHeatMap = async (binaryData: Buffer) => {
 
     const tempArr = new Int8Array(binaryData);
 
-    for (let y = 0; y < DIMENSION_Y; y += GRID_STEP) {
-      for (let x = 0; x < DIMENSION_X; x += GRID_STEP) {
-        const temp = tempArr[y * DIMENSION_X + x];
+    const imageData = ctx.getImageData(
+      0,
+      0,
+      EMPTY_IMAGE_WIDTH,
+      EMPTY_IMAGE_HEIGHT
+    );
+    const pixels = imageData.data;
 
-        if (temp === -1) {
-          continue;
-        }
+    for (let py = 0; py < EMPTY_IMAGE_HEIGHT; py++) {
+      const gridRow =
+        Math.floor(
+          ((EMPTY_IMAGE_HEIGHT - 1 - py) * DIMENSION_Y) / EMPTY_IMAGE_HEIGHT
+        ) * DIMENSION_X;
 
-        ctx.fillStyle = setColor(temp);
-        ctx.fillRect(
-          x * slotWidth,
-          EMPTY_IMAGE_HEIGHT - y * slotHeight,
-          slotWidth * GRID_STEP,
-          slotHeight * GRID_STEP
-        );
+      for (let px = 0; px < EMPTY_IMAGE_WIDTH; px++) {
+        const temp =
+          tempArr[gridRow + Math.floor((px * DIMENSION_X) / EMPTY_IMAGE_WIDTH)];
+
+        if (temp === -1) continue;
+
+        const [r, g, b] = setColorRgb(temp);
+        const i = (py * EMPTY_IMAGE_WIDTH + px) * 4;
+
+        pixels[i] = r;
+        pixels[i + 1] = g;
+        pixels[i + 2] = b;
+        pixels[i + 3] = 255;
       }
     }
+
+    ctx.putImageData(imageData, 0, 0);
 
     const buf = canvas.toBuffer("image/jpeg");
 
@@ -107,9 +124,16 @@ const generateHeatMap = async (binaryData: Buffer) => {
 
 app.get("/api/data", async (req: any, res: any) => {
   try {
+    if (cached) {
+      res.send(cached);
+      return;
+    }
+
     const binaryData = await readBinaryFile(BINARY_FILE_PATH);
-    const bufferHeatMap = await generateHeatMap(binaryData);
-    res.send(bufferHeatMap);
+
+    cached = await generateHeatMap(binaryData);
+
+    res.send(cached);
   } catch (error) {
     console.log(error);
     res.status(500).send(`Error: ${error}`);
